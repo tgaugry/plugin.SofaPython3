@@ -1,91 +1,261 @@
-cmake_minimum_required(VERSION 3.1)
-project(SofaPython3 VERSION 1.0)
+cmake_minimum_required(VERSION 3.12)
 
-find_package(SofaFramework REQUIRED)
-find_package(SofaSimulation REQUIRED)
+project(SofaPython3 VERSION 24.12.99)
 
-set(PYTHON3_LIBRARY "/usr/lib/x86_64-linux-gnu/libpython3.6m.so")
-set(PYTHON3_LIBRARIES "/usr/lib/x86_64-linux-gnu/libpython3.6m.so")
-set(PYTHON3_INCLUDE_DIR "/usr/include/python3.6/")
-set(PYTHON_LIBRARIES ${PYTHON3_LIBRARIES})
-set(PYTHON_LIBRARY ${PYTHON3_LIBRARY})
-set(PYTHON_INCLUDE_DIRS ${PYTHON3_INCLUDE_DIR})
-set(PYTHON_EXECUTABLE python3.6m)
+find_package(Sofa.Config REQUIRED)
 
-message("-- Python vars: ${PYTHON_INCLUDE_DIRS}")
-message("-- Python vars: ${PYTHON_LIBRARIES}")
-message("-- Python vars: ${PYTHON_LIBRARY}")
+# Detect if SofaPython3 is a subproject of another project (eg. when compiled within Sofa)
+if (NOT "${CMAKE_PROJECT_NAME}" STREQUAL "${PROJECT_NAME}")
+    set(SP3_COMPILED_AS_SUBPROJECT 1)
+    message(STATUS "${PROJECT_NAME} is compiled as a subproject to the external project '${CMAKE_PROJECT_NAME}'.")
+    if("${CMAKE_PROJECT_NAME}" STREQUAL "Sofa")
+        set(SP3_COMPILED_AS_SOFA_SUBPROJECT 1)
+    endif()
+else()
+    unset(SP3_COMPILED_AS_SUBPROJECT)
+endif ()
 
-find_package(pybind11 QUIET)
-if(NOT pybind11_FOUND)#
-  message("-- Cannot build the python module 'Sofa', missing the pybind software to generate the bindings.")
-  return()
+# If the plugin is compiled within SOFA, add an option to deactivate it, in which case the remaining
+# of this file won't run and therefore will not generate any error if the requirements (python, pybind11)
+# are not found.
+if (SP3_COMPILED_AS_SOFA_SUBPROJECT)
+    option(PLUGIN_SOFAPYTHON3 "Build the SofaPython3 plugin." ON)
+    if (NOT PLUGIN_SOFAPYTHON3)
+        return()
+    else()
+        message("Adding plugin SofaPython3")
+    endif()
 endif()
 
-message("-- Python vars: ${PYTHON_INCLUDE_DIRS}")
-message("-- Python vars: ${PYTHON_LIBRARIES}")
-message("-- Python vars: ${PYTHON_LIBRARY}")
+# CMAKE TOOLS
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/CMake")
+include(SofaPython3Tools)
 
+# OPTIONS
+include(CMakeDependentOption)
 
-#find_package(pybind11 QUIET)
-#if(NOT pybind11_FOUND)#
-#  message("-- Cannot build the python module 'Sofa', missing the pybind software to generate the bindings.")
-#  return()
-#endif()
-
-set(HEADER_FILES
-    src/SofaPython3/config.h
-    src/SofaPython3/initModule.h
-    src/SofaPython3/PythonEnvironment.h
-    src/SofaPython3/PythonTest.h
-    src/SofaPython3/SceneLoaderPY3.h
-)
-
-set(SOURCE_FILES
-    src/SofaPython3/initModule.cpp
-    src/SofaPython3/PythonEnvironment.cpp
-    src/SofaPython3/PythonTest.cpp
-    src/SofaPython3/SceneLoaderPY3.cpp
-)
-
-set(EXTRA_FILES
-    SofaPython3Config.cmake.in
-    )
-    
-add_library(${PROJECT_NAME} SHARED ${HEADER_FILES} ${SOURCE_FILES} ${EXTRA_FILES})
-set_target_properties(${PROJECT_NAME} PROPERTIES COMPILE_FLAGS "-DSOFA_BUILD_SOFAPYTHON3")
-
-target_link_libraries(${PROJECT_NAME} PUBLIC SofaCore SofaSimulationCore SofaSimulationGraph)
-
-if(CMAKE_SYSTEM_NAME STREQUAL Linux)
-    # dlopen() is used on Linux for a workaround (see PythonEnvironnement.cpp)
-    target_link_libraries(${PROJECT_NAME} PRIVATE dl)
+# If SOFA_BUILD_TESTS exists and is OFF, then this option will be auto-disabled
+cmake_dependent_option(SP3_BUILD_TEST "Compile the automatic tests for SofaPython3, along with the gtest library." ON "SOFA_BUILD_TESTS OR NOT DEFINED SOFA_BUILD_TESTS" OFF)
+if(SP3_BUILD_TEST)
+    # TODO: remove this when SOFA's GTest handles threads correctly
+    find_package(Threads REQUIRED)
 endif()
 
-target_include_directories(${PROJECT_NAME} PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/>")
-target_include_directories(${PROJECT_NAME} PUBLIC "$<INSTALL_INTERFACE:include>")
+sofa_find_package(Sofa.Component.IO.Mesh QUIET)
+CMAKE_DEPENDENT_OPTION(SP3_WITH_SOFAEXPORTER "Bind the SOFA exporter component." ON "Sofa.Component.IO.Mesh_FOUND" OFF)
 
-target_link_libraries(${PROJECT_NAME} PRIVATE "${PYTHON_LIBRARY}" )
-target_include_directories(${PROJECT_NAME} PRIVATE "${PYTHON_INCLUDE_DIR}")
 
-## When installing, copy the content of the example directory into module/SofaPython3
-install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/examples DESTINATION modules/SofaPython3 COMPONENT resources)
+sofa_find_package(Sofa.GUI.Common QUIET)
+CMAKE_DEPENDENT_OPTION(SP3_WITH_SOFAGUI "Bind the SOFA gui component." ON "Sofa.GUI.Common_FOUND" OFF)
 
-## When installing, copy the target into module/SofaPython3
-install(TARGETS ${PROJECT_NAME} DESTINATION modules/SofaPython3)
 
-# Config files and install rules for pythons scripts
-sofa_set_python_directory(${PROJECT_NAME} "python")
+# BUILD OPTIONS
+if (NOT SP3_COMPILED_AS_SUBPROJECT)
+    if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+        set(CMAKE_INSTALL_PREFIX ${CMAKE_BINARY_DIR}/install CACHE PATH "Install path prefix, prepended onto install directories." FORCE)
+    endif()
+    set(ARCHIVE_OUTPUT_DIRECTORY lib)
+    set(RUNTIME_OUTPUT_DIRECTORY bin)
 
-# The signature of sofa_create_package is
-#     sofa_create_package(package_name, version, the_targets, <include_subdir>)
-# This function assumes that there is a FooConfig.cmake.in file template in the source directory.
-# This function is an all in one replacement for install(TARGET), install(EXPORT), and also add
-# the example directory in the INSTALL set.
-sofa_create_package(${PROJECT_NAME} ${PROJECT_VERSION} SofaPython3 "SofaPython3")
+    if(WIN32)
+        set(LIBRARY_OUTPUT_DIRECTORY ${RUNTIME_OUTPUT_DIRECTORY})
+    else()
+        set(LIBRARY_OUTPUT_DIRECTORY ${ARCHIVE_OUTPUT_DIRECTORY})
+    endif()
 
-### Tests
-#add_subdirectory(tests)
+    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/${ARCHIVE_OUTPUT_DIRECTORY})
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/${RUNTIME_OUTPUT_DIRECTORY})
+    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/${LIBRARY_OUTPUT_DIRECTORY})
+endif()
 
-### Python binding
+if(MSVC)
+    # With C++17 (/std:c++17), to get MSVC to behave, you need /permissive-
+    # see https://github.com/pybind/pybind11/issues/1616
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /permissive-")
+
+    # use M_PI in cmath.h
+    add_definitions("-D_USE_MATH_DEFINES")
+endif()
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# Enable use of folder for IDE like VS
+set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+
+# Set the minimum python version to 3.7
+set(PYBIND11_PYTHON_VERSION 3.7)
+
+# Find Python3
+find_package(Python ${PYBIND11_PYTHON_VERSION} COMPONENTS Interpreter Development REQUIRED)
+
+# Save PYTHON_* vars
+set(PYTHON_VERSION_RESET "${PYTHON_VERSION}")
+set(PYTHON_EXECUTABLE_RESET "${PYTHON_EXECUTABLE}")
+set(PYTHON_LIBRARIES_RESET "${PYTHON_LIBRARIES}")
+set(PYTHON_INCLUDE_DIRS_RESET "${PYTHON_INCLUDE_DIRS}")
+set(PYTHON_LIBRARY_RESET "${PYTHON_LIBRARY}")
+set(PYTHON_INCLUDE_DIR_RESET "${PYTHON_INCLUDE_DIR}")
+
+# Change PYTHON_* vars before pybind11 find_package
+# to be sure that pybind11 relies on the right Python version
+set(PYTHON_VERSION "${Python_VERSION}" CACHE STRING "" FORCE)
+set(PYTHON_EXECUTABLE "${Python_EXECUTABLE}" CACHE FILEPATH "" FORCE)
+set(PYTHON_LIBRARIES "${Python_LIBRARIES}" CACHE STRING "" FORCE)
+set(PYTHON_INCLUDE_DIRS "${Python_INCLUDE_DIRS}" CACHE STRING "" FORCE)
+if(EXISTS "${Python_LIBRARY}")
+    set(PYTHON_LIBRARY "${Python_LIBRARY}" CACHE INTERNAL "" FORCE)
+elseif(EXISTS "${Python_LIBRARIES}")
+    set(PYTHON_LIBRARY "${Python_LIBRARIES}" CACHE INTERNAL "" FORCE)
+endif()
+if(EXISTS "${Python_INCLUDE_DIR}")
+    set(PYTHON_INCLUDE_DIR "${Python_INCLUDE_DIR}" CACHE INTERNAL "" FORCE)
+elseif(EXISTS "${Python_INCLUDE_DIRS}")
+    set(PYTHON_INCLUDE_DIR "${Python_INCLUDE_DIRS}" CACHE INTERNAL "" FORCE)
+endif()
+string(REGEX MATCH "[0-9]+\.[0-9]+" PythonMAJMIN "${Python_VERSION}")
+
+# Set the minimum pybind11 version to 2.3 (before that the pybind11::embed target did not exist)
+find_package(pybind11 2.3 CONFIG QUIET REQUIRED)
+
+set(SP3_PYTHON_PACKAGES_DIRECTORY
+    "python3/site-packages"
+    CACHE STRING
+    "Directory name where the python packages will be built and installed.
+    This will be prepend to LIBRARY_OUTPUT_DIRECTORY (default to site-packages)"
+)
+
+# Get the Python's user site packages directory, or FALSE if not found
+SP3_get_python_user_site()
+
+# Add an option to automatically create links towards the python packages of SP3
+# into the python's user site packages directory.
+option(
+    SP3_LINK_TO_USER_SITE
+    "Install python packages to python's user site directory. The directory path can be changed by setting SP3_PYTHON_PACKAGES_LINK_DIRECTORY."
+    OFF
+)
+
+set(SP3_PYTHON_PACKAGES_LINK_DIRECTORY
+    "${PYTHON_USER_SITE}"
+    CACHE PATH
+    "Path to the directory where the python packages will be installed (with symbolic links).
+    (default to $(python3 -m site --user-site))"
+)
+
+message(STATUS "Python:
+    Version: ${Python_VERSION}
+    Executable: ${Python_EXECUTABLE}
+    Headers: ${Python_INCLUDE_DIRS}
+    Libraries: ${Python_LIBRARIES}
+    User site: ${PYTHON_USER_SITE}"
+)
+
+
+message(STATUS "pybind11:
+    Version: ${pybind11_VERSION}
+    Config: ${pybind11_CONFIG}"
+)
+
+# When using python3 from XCode on MacOS, the RPath is wrongly set to XCode frameworks directory:
+#   LC_LOAD_DYLIB   @rpath/Python3.framework/Versions/3.7/Python3
+#   LC_RPATH        /Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.7/lib
+# Hence LC_RPATH/LC_LOAD_DYLIB does not exists.
+# Until this is fixed (not sure if it comes from pybind11, cmake or XCode), we can add another path to RPATH:
+#   LC_LOAD_DYLIB   @rpath/Python3.framework/Versions/3.7/Python3
+#   LC_RPATH        /Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.7/lib
+#                   /Applications/Xcode.app/Contents/Developer/Library/Frameworks  <----- ADDED
+# And now one combination of  LC_RPATH/LC_LOAD_DYLIB will be valid.
+# This should't change anything for those that use other python libs than XCode (homebrew for example) since the
+# LC_LOAD_DYLIB from XCode is quite unique.
+if (APPLE)
+    set(CMAKE_INSTALL_RPATH "/Applications/Xcode.app/Contents/Developer/Library/Frameworks")
+    set(CMAKE_BUILD_RPATH "/Applications/Xcode.app/Contents/Developer/Library/Frameworks")
+endif()
+
+if (NOT SP3_COMPILED_AS_SUBPROJECT)
+    get_filename_component(SOFA_ROOT_DIR "${SofaFramework_DIR}/../../.." ABSOLUTE)
+    message(STATUS "SOFA Framework:\n\tVersion: ${SofaFramework_VERSION}\n\tLocation: ${SOFA_ROOT_DIR}")
+endif()
+
+add_subdirectory(Plugin)
 add_subdirectory(bindings)
+add_subdirectory(examples)
+add_subdirectory(docs)
+if (SP3_BUILD_TEST)
+    add_subdirectory(Testing)
+endif()
+
+SP3_add_python_package(
+    SOURCE_DIRECTORY
+        ${CMAKE_CURRENT_SOURCE_DIR}/constants
+    TARGET_DIRECTORY
+        Sofa/constants
+)
+
+## This is only to warn users that splib is now relocated in its own repository
+# it just contains a __init__.py rising an exception indicating to where to find the plugin.
+# If splib is available, then splib/__init__.py will be overriden by the one from the real splib.
+SP3_add_python_package(
+    SOURCE_DIRECTORY
+        ${CMAKE_CURRENT_SOURCE_DIR}/splib
+    TARGET_DIRECTORY
+        splib
+)
+
+sofa_create_package(
+    PACKAGE_NAME ${PROJECT_NAME}
+    PACKAGE_VERSION ${PROJECT_VERSION}
+    RELOCATABLE "plugins"
+    )
+
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/CMake/SofaPython3Tools.cmake" "${CMAKE_BINARY_DIR}/lib/cmake/SofaPython3Tools.cmake" COPYONLY)
+install(FILES
+    "${CMAKE_CURRENT_SOURCE_DIR}/CMake/SofaPython3Tools.cmake"
+    DESTINATION lib/cmake/SofaPython3
+    COMPONENT headers
+)
+
+if (SP3_LINK_TO_USER_SITE AND SP3_PYTHON_PACKAGES_LINK_DIRECTORY)
+    set(SP3_SITE_PACKAGES_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib/${SP3_PYTHON_PACKAGES_DIRECTORY}")
+
+    file(GLOB directories RELATIVE "${SP3_SITE_PACKAGES_OUTPUT_DIRECTORY}" "${SP3_SITE_PACKAGES_OUTPUT_DIRECTORY}/*")
+    
+    # Create the site-package link directory if it doesn't exists yet
+    install(DIRECTORY DESTINATION ${SP3_PYTHON_PACKAGES_LINK_DIRECTORY})
+    foreach(directory ${directories})
+        if(SP3_COMPILED_AS_SOFA_SUBPROJECT)
+            set(LINK_SOURCE_DIRECTORY ${CMAKE_INSTALL_PREFIX}/plugins/SofaPython3/lib/${SP3_PYTHON_PACKAGES_DIRECTORY}/${directory})
+        else()
+            set(LINK_SOURCE_DIRECTORY ${CMAKE_INSTALL_PREFIX}/lib/${SP3_PYTHON_PACKAGES_DIRECTORY}/${directory})
+        endif()
+        if(IS_DIRECTORY ${CMAKE_BINARY_DIR}/lib/${SP3_PYTHON_PACKAGES_DIRECTORY}/${directory})
+            if(WIN32)
+                install(CODE "\
+                execute_process( \
+                    COMMAND ${CMAKE_COMMAND} -E copy_directory \
+                    ${LINK_SOURCE_DIRECTORY}/ \
+                    ${SP3_PYTHON_PACKAGES_LINK_DIRECTORY}/${directory}   \
+                )"
+            )
+            else()
+                install(CODE "\
+                    execute_process( \
+                        COMMAND ${CMAKE_COMMAND} -E create_symlink \
+                        ${LINK_SOURCE_DIRECTORY}/ \
+                        ${SP3_PYTHON_PACKAGES_LINK_DIRECTORY}/${directory}   \
+                    )"
+                )
+            endif()
+        endif()
+    endforeach()
+endif()
+
+# Reset PYTHON_* vars
+set(PYTHON_VERSION "${PYTHON_VERSION_RESET}" CACHE STRING "" FORCE)
+set(PYTHON_EXECUTABLE "${PYTHON_EXECUTABLE_RESET}" CACHE FILEPATH "" FORCE)
+set(PYTHON_LIBRARIES "${PYTHON_LIBRARIES_RESET}" CACHE STRING "" FORCE)
+set(PYTHON_INCLUDE_DIRS "${PYTHON_INCLUDE_DIRS_RESET}" CACHE STRING "" FORCE)
+set(PYTHON_LIBRARY "${PYTHON_LIBRARY_RESET}" CACHE INTERNAL "" FORCE)
+set(PYTHON_INCLUDE_DIR "${PYTHON_INCLUDE_DIR_RESET}" CACHE INTERNAL "" FORCE)

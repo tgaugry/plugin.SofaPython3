@@ -1,0 +1,11 @@
+*~
+*#
+.*~
+.*#
+__pycache__/
+*.pyc
+*.so
+docs/sphinx/build/*
+docs/sphinx/source/*/generated
+docs/sphinx/source/*/*/generated
+docs/sphinx/source/*/*/*/generated

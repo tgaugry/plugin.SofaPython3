@@ -2,122 +2,150 @@
 
 import unittest
 import Sofa
-import numpy as np
-import ad
-from ad import *
-from Sofa.Simulation import SingleSimulation
+import Sofa.Core
+import Sofa.Helper
+import Sofa.Simulation
+import SofaRuntime
+from MyRestShapeForceField import *
+from numpy.linalg import norm as np_norm
 
-class MyForceField(Sofa.ForceField):
+
+def createIntegrationScheme(node, use_implicit_scheme):
+    if use_implicit_scheme is True:
+        node.addObject('EulerImplicitIntegrationScheme', name='odeImplicitSolver',
+                       rayleighStiffness='0.1', rayleighMass='0.1')
+    else:
+        node.addObject('EulerExplicitIntegrationScheme', name='odeExplicitSolver')
+
+
+def createSolver(node, use_iterative_solver):
+    if use_iterative_solver == True:
+        node.addObject('CGLinearSolver', name='linearSolver',
+                       iterations=30, tolerance=1.e-9, threshold=1.e-9)
+    else:
+        node.addObject('EigenSimplicialLLT', name='ldlSolver')
+
+
+def createParticle(node, node_name, use_implicit_scheme, use_iterative_solver):
+    p = node.addChild(node_name)
+    createIntegrationScheme(p, use_implicit_scheme)
+    createSolver(p, use_iterative_solver)
+    dofs = p.addObject('MechanicalObject', name="MO", position=[0, 0, 0])
+    p.addObject('UniformMass', totalMass=1.0)
+
+    myRSSFF = NaiveRestShapeSpringsForcefield(name="Springs",
+                                           stiffness=50,
+                                           mstate=dofs, rest_pos=dofs.rest_position)
+    p.addObject(myRSSFF)
+
+
+def rssffScene(use_implicit_scheme=True, use_iterative_solver=True):
+    node = Sofa.Core.Node("root")
+    node.addObject('DefaultAnimationLoop')
+    node.addObject("RequiredPlugin", pluginName="Sofa.Component.StateContainer")
+    node.addObject("RequiredPlugin", pluginName="Sofa.Component.LinearSolver")
+    node.addObject("RequiredPlugin", pluginName="Sofa.Component.IntegrationScheme")
+    node.addObject("RequiredPlugin", pluginName="Sofa.Component.Mass")
+
+    node.gravity = [0, -10, 0]
+    createParticle(node, "particle", use_implicit_scheme, use_iterative_solver)
+    return node
+
+class EmptyForceField(Sofa.Core.ForceFieldVec3d):
     def __init__(self, *args, **kwargs):
-        kwargs["ks"] = kwargs.get("ks", 1.0)
-        kwargs["kd"] = kwargs.get("kd", 0.1)
-        Sofa.ForceField.__init__(self, *args, **kwargs)
-                        
-    def init(self):
-        self.initpos = self.mstate.position.toarray().copy()
-        self.k = np.zeros((1,1))
-        self.f = []
-        self.d = 0.5
+        Sofa.Core.ForceFieldVec3d.__init__(self, *args, **kwargs)
+        pass
 
-    def addForce(self, m, out_force, pos, vel):
-        ip = self.initpos
-        ks = self.ks 
-        kd = self.kd 
-        of = out_force
-        p = pos #adnumber(pos, "pos")
-        v = vel
-        u = ip-p
-        res = (u * ks ) 
-        
-        #self.res = np.ndarray.flatten(res)
-        #self.p = np.ndarray.flatten(p)
-                        
-        #def f(x):
-        #        return x.x
-        #vf=np.vectorize(f)
-        
-        #out_force += vf(res)
-        out_force += res
-        
-        #print(" Python::addForce: ", u, "*", ks, "=", out_force)
-         
-
-    def addDForce(self, df, dx, kFactor, bFactor):
-        #print("===============================")
-        #print(" F", self.res)
-        #print(" pos", self.p)
-        #print(" Python::addDForce df(in): ", df)
-        #print(" Python::addDForce dx: ", np.ndarray.flatten(dx))        
-        #print(" Python::addDForce kFactor: ", (kFactor, bFactor))        
-        #print("RES is ", self.res[0,0].d())
-        #print("RES is ", self.res[0,1].d())
-        #print("RES is ", self.res[0,2].d())
-        return 
-        from ad import jacobian
-        j = jacobian(self.res, self.p)
-        #print(" Python::addDForce J:", j)
-        
-        tdf = j @ (np.ndarray.flatten(dx) * kFactor)
-        #print(" Python::addDForce df: ", tdf)
-        df += tdf.reshape((-1,3))
-        print(" Python::addDForce df: ", df)
-        
-    def addKToMatrix(self, a, b):
-        print(" Python::addKToMatrix: ", a, " ", b)
-
-    #def updateForceMask(self):
-    #    print(" Python::updateFroceMask: ")
-
-class CreateObject(object):
-        def __init__(self, *args, **kwargs):
-                self.args = args
-                self.kwargs = kwargs
-
-def RestShapeObject(impl, name="unnamed", position=[]):
-        node = Sofa.Node(name)
-        c = node.addObject("MechanicalObject", name="mechanical", position=position)
-        c.showObject = True
-        c.drawMode = 1
-
-        m = node.addObject("UniformMass", name="mass", vertexMass=0.1)
-        
-        if isinstance(impl, CreateObject): 
-                node.createObject(*impl.args, **impl.kwargs)        
-        else:        
-                d = node.addObject(impl)
-        return node
-                
 class Test(unittest.TestCase):
-    def test_animation(self):
-        node = Sofa.Node("TestAnimation")
-        node.addObject("OglLineAxis")
-        node.addObject("RequiredPlugin", name="SofaSparseSolver")
-        node.addObject("DefaultAnimationLoop", name="loop")
-        node.addObject("EulerImplicit")
-        node.addObject("CGLinearSolver", tolerance=1e-12, threshold=1e-12)
-        #node.addObject("SparseLDLSolver")
 
-        #object1.addChild( MyForceField("customFF", ks=5.0) )
-        a=node.addChild( RestShapeObject( MyForceField("customFF", ks=5.0) , name="python", position=[[i*1-10.0, 0, 0] for i in range(200)] ) )
-        a.mechanical.showColor = [1.0,0.0,0.0,1.0]
-        b=node.addChild( RestShapeObject( CreateObject("RestShapeSpringsForceField", stiffness=5.0) , name="c++", position=[[i*0.5-1.0, 0, 0] for i in range(1)]))
-        b.mechanical.showColor = [1.0,1.0,0.0,1.0]
-        
-        return node
+    def test_class_name(self):
+        c = EmptyForceField()
+        self.assertEqual(c.getClassName(), "EmptyForceField")
 
-def getTestsName():
-    suite = unittest.TestLoader().loadTestsFromTestCase(Test)
-    return [ test.id().split(".")[2] for test in suite]
+    def test_0_explicit(self):
+        root = rssffScene(use_implicit_scheme=False,
+                          use_iterative_solver=False)
 
-def runTests():
-        import sys
-        suite = None
-        if( len(sys.argv) == 1 ):
-            suite = unittest.TestLoader().loadTestsFromTestCase(Test)
-        else:
-            suite = unittest.TestSuite()
-            suite.addTest(Test(sys.argv[1]))
-        return unittest.TextTestRunner(verbosity=1).run(suite).wasSuccessful()
+        # do some steps here
+        Sofa.Simulation.initRoot(root)
 
-def createScene(rootNode):
-        rootNode.addChild(Test().test_animation())
+        for i in range(0, 100):
+            Sofa.Simulation.animate(root, root.dt.value)
+            self.assertLess(np_norm(
+                root.particle.MO.rest_position.value - root.particle.MO.position.value), 0.41,
+                "Passed threshold on step " + str(i) + ".")
+        return
+
+    def test_1_implicit_iterative(self):
+        root = rssffScene(use_implicit_scheme=True, use_iterative_solver=True)
+
+        # do some steps here
+        Sofa.Simulation.initRoot(root)
+
+        for i in range(0, 100):
+            Sofa.Simulation.animate(root, root.dt.value)
+            self.assertLess(np_norm(
+                root.particle.MO.rest_position.value - root.particle.MO.position.value), 0.26,
+                "Passed threshold on step " + str(i) + ".")
+        return
+
+    def test_2_implicit_direct(self):
+        root = rssffScene(use_implicit_scheme=True, use_iterative_solver=False)
+
+        # do some steps here
+        Sofa.Simulation.initRoot(root)
+
+        for i in range(0, 100):
+            Sofa.Simulation.animate(root, root.dt.value)
+            self.assertLess(np_norm(
+                root.particle.MO.rest_position.value - root.particle.MO.position.value), 0.26,
+                "Passed threshold on step " + str(i) + ".")
+        return
+
+    @staticmethod
+    def simulate_beam(linear_solver_template):
+        root = Sofa.Core.Node("rootNode")
+
+        root.addObject('DefaultAnimationLoop')
+
+        root.addObject('RequiredPlugin', pluginName='Sofa.Component.Constraint.Projective')
+        root.addObject('RequiredPlugin', pluginName='Sofa.Component.Engine.Select')
+        root.addObject('RequiredPlugin', pluginName='Sofa.Component.LinearSolver.Direct')
+        root.addObject('RequiredPlugin', pluginName='Sofa.Component.Mass')
+        root.addObject('RequiredPlugin', pluginName='Sofa.Component.IntegrationScheme.Backward')
+        root.addObject('RequiredPlugin', pluginName='Sofa.Component.SolidMechanics.FEM.Elastic')
+        root.addObject('RequiredPlugin', pluginName='Sofa.Component.StateContainer')
+        root.addObject('RequiredPlugin', pluginName='Sofa.Component.Topology.Container.Grid')
+
+        root.addObject('EulerImplicitIntegrationScheme', rayleighStiffness="0.1", rayleighMass="0.1")
+        root.addObject('SparseLDLSolver', template=linear_solver_template)
+
+        root.addObject('MechanicalObject', name="DoFs")
+        root.addObject('UniformMass', name="mass", totalMass="320")
+        root.addObject('RegularGridTopology', name="grid", nx="4", ny="4", nz="20", xmin="-9", xmax="-6", ymin="0", ymax="3", zmin="0", zmax="19")
+        root.addObject('BoxROI', name="box", box=[-10, -1, -0.0001,  -5, 4, 0.0001])
+        root.addObject('FixedConstraint', indices="@box.indices")
+        root.addObject('HexahedronFEMForceField', name="FEM", youngModulus="4000", poissonRatio="0.3", method="large")
+
+        Sofa.Simulation.initRoot(root)
+        Sofa.Simulation.animate(root, 0.0001)
+
+        return root
+
+    def test_stiffness_matrix_access_scalar(self):
+
+        root = self.simulate_beam("CompressedRowSparseMatrixd")
+        K = root.FEM.assembleKMatrix()
+
+        self.assertEqual(K.ndim, 2)
+        self.assertEqual(K.shape, (960, 960))
+        self.assertEqual(K.nnz, 52200)
+
+    def test_stiffness_matrix_access_blocks3x3(self):
+
+        root = self.simulate_beam("CompressedRowSparseMatrixMat3x3d")
+        K = root.FEM.assembleKMatrix()
+
+        self.assertEqual(K.ndim, 2)
+        self.assertEqual(K.shape, (960, 960))
+        self.assertEqual(K.nnz, 52200)

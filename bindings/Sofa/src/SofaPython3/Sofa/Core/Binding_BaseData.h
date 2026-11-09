@@ -1,19 +1,32 @@
+/******************************************************************************
+*                 SOFA, Simulation Open-Framework Architecture                *
+*                    (c) 2021 INRIA, USTL, UJF, CNRS, MGH                     *
+*                                                                             *
+* This program is free software; you can redistribute it and/or modify it     *
+* under the terms of the GNU Lesser General Public License as published by    *
+* the Free Software Foundation; either version 2.1 of the License, or (at     *
+* your option) any later version.                                             *
+*                                                                             *
+* This program is distributed in the hope that it will be useful, but WITHOUT *
+* ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or       *
+* FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License *
+* for more details.                                                           *
+*                                                                             *
+* You should have received a copy of the GNU Lesser General Public License    *
+* along with this program. If not, see <http://www.gnu.org/licenses/>.        *
+*******************************************************************************
+* Contact information: contact@sofa-framework.org                             *
+******************************************************************************/
 
-#ifndef PYTHONMODULE_SOFA_BINDING_BASEDATA_H
-#define PYTHONMODULE_SOFA_BINDING_BASEDATA_H
+#pragma once
 
-#include <sofa/core/objectmodel/BaseData.h>
-#include "DataHelper.h"
+#include <pybind11/pybind11.h>
 
-/// More info about smart pointer in
-/// pybind11.readthedocs.io/en/stable/advanced/smart_ptrs.html
-/// BaseData are raw ptr so we use the raw_ptr smart pointer.
-/// If you have a better way to do that, please make a PR.
-PYBIND11_DECLARE_HOLDER_TYPE(BaseData, sofapython3::raw_ptr<BaseData>)
+namespace sofapython3 {
 
-namespace sofapython3
-{
-    void moduleAddBaseData(py::module& m);
+    /// Forward declaration in pybind11.
+    /// more details in: https://github.com/sofa-framework/SofaPython3/pull/457
+    void moduleForwardAddBaseData(pybind11::module& m);
+    void moduleAddBaseData(pybind11::module& m);
+
 } /// sofapython3
-
-#endif /// PYTHONMODULE_SOFA_BINDING_BASEDATA_H

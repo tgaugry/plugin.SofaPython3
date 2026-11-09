@@ -1,39 +1,34 @@
-cmake_minimum_required(VERSION 3.1)
-project(PythonSofaGeometry_test)
+project(Bindings.SofaRuntime.Tests)
 
-####################################################################################################
-### Module dependencies
-####################################################################################################
-find_package(SofaPython QUIET)
-if(NOT SofaPython_FOUND)
-    message("-- PythonSofaGeometry_test is disabled because 'SofaPython' is missing or not activated.")
-    return()
-endif()
-find_package(SofaTest QUIET)
-if(NOT SofaTest_FOUND)
-    message("-- PythonSofaGeometry_test is disabled because 'SofaTest' is missing or not activated.")
-    return()
-endif()
-
-message("-- PythonSofaEditor_test is enabled.")
-
-
-####################################################################################################
-### Building
-####################################################################################################
 set(SOURCE_FILES
-    AllPythonSofaGeometry_test.cpp
+      ${CMAKE_CURRENT_SOURCE_DIR}/PythonModule_SofaRuntime_test.cpp
 )
 
 set(PYTHON_FILES
-    pyfiles/Plane_test.py
-    pyfiles/Ray_test.py
-    pyfiles/vector_test.py
-    )
+      ${CMAKE_CURRENT_SOURCE_DIR}/SofaRuntime/Base.py
+)
 
+find_package(Sofa.Testing REQUIRED)
+
+enable_testing()
 add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${PYTHON_FILES})
-target_link_libraries(${PROJECT_NAME} SofaTest SofaGTestMain)
-target_compile_definitions(${PROJECT_NAME} PRIVATE "PYTHON_TESTFILES_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/pyfiles/\"")
+target_link_libraries(${PROJECT_NAME} Sofa.Testing SofaPython3Testing)
+target_compile_definitions(${PROJECT_NAME} PRIVATE "PYTHON_TESTFILES_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
+set_target_properties(${PROJECT_NAME} PROPERTIES FOLDER "Bindings/Tests")
+
+# This will set rpaths relative to all SOFA core AND relocatable dependencies
+sofa_auto_set_target_rpath(
+    TARGETS ${PROJECT_NAME}
+    RELOCATABLE "plugins"
+)
 
 add_test(NAME ${PROJECT_NAME} COMMAND ${PROJECT_NAME})
 
+SP3_configure_directory(${CMAKE_CURRENT_SOURCE_DIR}/SofaRuntime ${CMAKE_BINARY_DIR}/${RUNTIME_OUTPUT_DIRECTORY}/${PROJECT_NAME}.d/SofaRuntime)
+install(DIRECTORY ${CMAKE_BINARY_DIR}/${RUNTIME_OUTPUT_DIRECTORY}/${PROJECT_NAME}.d/SofaRuntime DESTINATION ${RUNTIME_OUTPUT_DIRECTORY}/${PROJECT_NAME}.d)
+
+install(
+    TARGETS ${PROJECT_NAME}
+    EXPORT BindingsTargets
+    RUNTIME DESTINATION ${RUNTIME_OUTPUT_DIRECTORY}
+)

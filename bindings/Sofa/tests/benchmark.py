@@ -6,17 +6,16 @@ import numpy
 sys.path.append("./Sofa/package")
 sys.path.append("./SofaRuntime/package")
 
-import Sofa
+import Sofa.Core
 import SofaRuntime
-
-SofaRuntime.importPlugin("SofaAllCommonComponents")
 
 import numpy
 rawcpy = numpy.zeros((1000000,3), dtype=numpy.float64)
 slowcpy = numpy.zeros((1000000,3), dtype=numpy.float32)
 aList = rawcpy.tolist()
 
-root = Sofa.Node("root")
+root = Sofa.Core.Node("root")
+root.addObject("RequiredPlugin", pluginName="Sofa.Component.StateContainer")
 obj = root.createObject("MechanicalObject", name="test", position=aList)
 
 obj.position = aList
@@ -31,7 +30,7 @@ import timeit
 it = 1000
 
 def pattern1SofaPython():
-        l = obj.position.tolist()
+        l = obj.position.toList()
         for i in range(0, len(l)):
                 l[i]=[l[i][0]+1.0,l[i][0]+2.0,l[i][0]+3.0]
         obj.position = l
@@ -50,7 +49,7 @@ def pattern1bisSofaPython3():
 
 def pattern2SofaPython():
         global aList
-        l = obj.position.tolist()
+        l = obj.position.toList()
         for i in range(0, len(l)):
                 l[i]=[l[i][0]+aList[i][0],l[i][1]+aList[i][1],l[i][2]+aList[i][2]]
         obj.position = l
@@ -59,10 +58,8 @@ def pattern2SofaPython3():
         global rawcpy
         obj.position += rawcpy
 
-        
-print(timeit.timeit("obj.position.tolist()", number=it, globals=globals()))
+print(timeit.timeit("obj.position.toList()", number=it, globals=globals()))
 print(timeit.timeit("obj.position", number=it, globals=globals()))
-#print(timeit.timeit("obj.position[0,0]", number=it, globals=globals()))
 it = 10
 
 print("pattern 1")
@@ -74,11 +71,11 @@ print("pattern 2")
 print(timeit.timeit("pattern2SofaPython()", number=it, globals=globals()))
 print(timeit.timeit("pattern2SofaPython3()", number=it, globals=globals()))
 
-
 print("setattr")
 print(timeit.timeit("obj.position=aList", number=it, globals=globals()))
 print(timeit.timeit("obj.position=rawcpy", number=it, globals=globals()))
 print(timeit.timeit("obj.position=slowcpy", number=it, globals=globals()))
+
 print("lastmile")
 print(timeit.timeit("d = obj.position.copy()", number=it, globals=globals()))
 print(timeit.timeit("d1 = rawcpy.copy()", number=it, globals=globals()))

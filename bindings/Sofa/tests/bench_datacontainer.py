@@ -1,21 +1,15 @@
 # coding: utf8
-
 import sys
 import os
 import numpy
 import timeit
-sys.path.append("./Sofa/package")
-sys.path.append("./SofaRuntime/package")
-
-import Sofa
+import Sofa.Core
 import SofaRuntime
 
-SofaRuntime.importPlugin("SofaAllCommonComponents")
-
-import numpy
 rawcpy = numpy.zeros((1000000,3), dtype=numpy.float64)
 
-root = Sofa.Node("root")
+root = Sofa.Core.Node("root")
+root.addObject("RequiredPlugin", pluginName="Sofa.Component.StateContainer")
 obj = root.createObject("MechanicalObject", name="test", position=rawcpy.tolist())
 
 it=10

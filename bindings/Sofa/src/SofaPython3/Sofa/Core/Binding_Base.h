@@ -1,71 +1,77 @@
-#ifndef PYTHONMODULE_SOFA_BINDING_BASE_H
-#define PYTHONMODULE_SOFA_BINDING_BASE_H
+/******************************************************************************
+*                 SOFA, Simulation Open-Framework Architecture                *
+*                    (c) 2021 INRIA, USTL, UJF, CNRS, MGH                     *
+*                                                                             *
+* This program is free software; you can redistribute it and/or modify it     *
+* under the terms of the GNU Lesser General Public License as published by    *
+* the Free Software Foundation; either version 2.1 of the License, or (at     *
+* your option) any later version.                                             *
+*                                                                             *
+* This program is distributed in the hope that it will be useful, but WITHOUT *
+* ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or       *
+* FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License *
+* for more details.                                                           *
+*                                                                             *
+* You should have received a copy of the GNU Lesser General Public License    *
+* along with this program. If not, see <http://www.gnu.org/licenses/>.        *
+*******************************************************************************
+* Contact information: contact@sofa-framework.org                             *
+******************************************************************************/
 
+#pragma once
+
+#include <SofaPython3/config.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 #include <sofa/core/objectmodel/Base.h>
 #include <sofa/core/objectmodel/BaseData.h>
 
-/// More info about smart pointer in
-/// /pybind11.readthedocs.io/en/stable/advanced/smart_ptrs.html
-PYBIND11_DECLARE_HOLDER_TYPE(Base, sofa::core::sptr<Base>, true)
+namespace sofapython3 {
 
-template class pybind11::class_<sofa::core::objectmodel::Base,
-                                sofa::core::objectmodel::Base::SPtr>;
+template <typename T>
+using py_shared_ptr = sofa::core::sptr<T>;
 
-namespace sofapython3
-{
-/// Makes an alias for the pybind11 namespace to increase readability.
-namespace py { using namespace pybind11; }
-using namespace pybind11::literals;
-using sofa::core::objectmodel::Base;
-using sofa::core::objectmodel::BaseData;
-using sofa::core::sptr;
+} // namespace sofapython3
 
-class BindingBase
+PYBIND11_DECLARE_HOLDER_TYPE(T, sofapython3::py_shared_ptr<T>, true)
+
+namespace sofapython3 {
+
+class SOFAPYTHON3_API BindingBase
 {
 public:
-    static py::object GetAttr(Base* self, const std::string& s, bool doThrowException=true);
-    static void SetAttr(py::object self, const std::string& s, pybind11::object value, bool withDict=false);
-    static void SetAttr(Base& self, const std::string& s, py::object value);
-    static void SetAttrFromArray(py::object self, const std::string& s, const pybind11::array &value);
+    static void SetAttr(sofa::core::objectmodel::Base& self, const std::string& s, pybind11::object value);
+
+    static void SetAttr(pybind11::object self, const std::string& s, pybind11::object value);
+    static pybind11::object GetAttr(sofa::core::objectmodel::Base* self, const std::string& s, bool doThrowException=true);
+    static void SetAttrFromArray(pybind11::object self, const std::string& s, const pybind11::array &value);
+
+    /// Set the data field value from the array.
+    static void SetDataFromArray(sofa::core::objectmodel::BaseData* data, const pybind11::array& value);
+    static bool SetData(sofa::core::objectmodel::BaseData* data, pybind11::object value);
+    static bool SetLink(sofa::core::objectmodel::BaseLink* link, pybind11::object value);
+    static pybind11::object setDataValues(sofa::core::objectmodel::Base& self, pybind11::kwargs kwargs);
+
+    static pybind11::list getDataFields(sofa::core::objectmodel::Base& self);
+    static pybind11::list getLinks(sofa::core::objectmodel::Base& self);
+    static sofa::core::objectmodel::BaseData* addData(pybind11::object py_self, const std::string& name, pybind11::object value = pybind11::object(), pybind11::object defaultValue = pybind11::object(), const std::string& help = "", const std::string& group = "Property", std::string type = "");
+    static sofa::core::objectmodel::BaseData* addDataFromData(sofa::core::objectmodel::Base* self, pybind11::object d);
+    static sofa::core::objectmodel::BaseLink* addLink(pybind11::object py_self, const std::string& name, pybind11::object value, const std::string& help);
+    static pybind11::list __dir__(sofa::core::objectmodel::Base* self);
+    static pybind11::object __getattr__(pybind11::object self, const std::string& s);
+    static void __setattr__(pybind11::object self, const std::string& s, pybind11::object value);
+    static pybind11::object getData(sofa::core::objectmodel::Base& self, const std::string&);
+
+    static pybind11::object getLoggedMessagesAsString(sofa::core::objectmodel::Base& self);
+    static pybind11::object countLoggedMessages(sofa::core::objectmodel::Base& self);
+    static pybind11::object clearLoggedMessages(sofa::core::objectmodel::Base& self);
+    static std::string getPathName(sofa::core::objectmodel::Base& self);
+    static std::string getLinkPath(sofa::core::objectmodel::Base& self);
 };
 
-py::buffer_info toBufferInfo(BaseData& m);
-bool hasArrayFor(BaseData* d);
-py::array resetArrayFor(BaseData* d);
-py::array getPythonArrayFor(BaseData* d);
-py::object convertToPython(BaseData* d);
-
-class DataDict
-{
-public:
-    sptr<Base> owner;
-    DataDict(sptr<Base> b){ owner = b; }
-};
-
-class DataDictIterator
-{
-public:
-    Base::SPtr owner;
-    size_t     index=0;
-    bool       key;
-    bool       value;
-    DataDictIterator(Base::SPtr owner_, bool withKey, bool withValue)
-    {
-        owner=owner_;
-        index=0;
-        key=withKey;
-        value=withValue;
-    }
-};
-
-void moduleAddDataDict(py::module& m);
-void moduleAddDataDictIterator(py::module& m);
-void moduleAddBase(py::module& m);
-
-
+/// Forward declaration in pybind11.
+/// more details in: https://github.com/sofa-framework/SofaPython3/pull/457
+void moduleForwardAddBase(pybind11::module& m);
+void moduleAddBase(pybind11::module& m);
 
 } /// namespace sofapython3
-
-#endif /// PYTHONMODULE_SOFA_BINDING_BASE_H
